@@ -1,3 +1,6 @@
 [submodule "env/easycrypt"]
 	path = env/easycrypt
 	url = https://github.com/EasyCrypt/easycrypt.git
+[submodule "env/jasmin"]
+	path = env/jasmin
+	url = https://github.com/jasmin-lang/jasmin.git
