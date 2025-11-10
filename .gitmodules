@@ -1,0 +1,3 @@
+[submodule "env/easycrypt"]
+	path = env/easycrypt
+	url = https://github.com/EasyCrypt/easycrypt.git
