@@ -1,0 +1,190 @@
+require "double.jazz"
+
+require "complex.jinc"
+
+/*
+j_cre
+j_cim
+j_cadd
+j_csub
+j_cmul
+j_cround
+j_ctrunc
+j_cdist2
+*/
+
+export fn j_cre
+( reg complex a
+) -> reg double
+{
+  reg double d;
+  d = complex_re(a);
+  return d;
+}
+
+// ABI for structs...
+export fn jj_cre
+( reg complex are aim
+) -> reg double
+{
+  reg complex a;
+  reg double d;
+  a = complex_pack(are, aim);
+  d = complex_re(a);
+  return d;
+}
+
+export fn j_cim
+( reg complex a
+) -> reg double
+{
+  reg double d;
+  d = complex_im(a);
+  return d;
+}
+
+// ABI for structs...
+export fn jj_cim
+( reg double are aim
+) -> reg double
+{
+  reg complex a;
+  reg double d;
+  a = complex_pack(are, aim);
+  d = complex_im(a);
+  return d;
+}
+
+export fn j_cadd
+( reg complex a b
+) -> reg complex
+{
+  reg complex c;
+  c = complex_add(a, b);
+  return c;
+}
+
+// ABI for structs...
+export fn jj_cadd
+( reg double are aim bre bim
+) -> reg double, reg double
+{
+  reg complex a, b, c;
+  reg double cre, cim;
+  a = complex_pack(are, aim);
+  b = complex_pack(bre, bim);
+  c = complex_add(a, b);
+  cre, cim = complex_unpack(c);
+  return cre, cim;
+}
+
+export fn j_csub
+( reg complex a b
+) -> reg complex
+{
+  reg complex c;
+  c = complex_sub(a, b);
+  return c;
+}
+
+// ABI for structs...
+export fn jj_csub
+( reg double are aim bre bim
+) -> reg double, reg double
+{
+  reg complex a, b, c;
+  reg double cre, cim;
+  a = complex_pack(are, aim);
+  b = complex_pack(bre, bim);
+  c = complex_sub(a, b);
+  cre, cim = complex_unpack(c);
+  return cre, cim;
+}
+
+export fn j_cmul
+( reg complex a b
+) -> reg complex
+{
+  reg complex c;
+  c = complex_mul(a, b);
+  return c;
+}
+
+// ABI for structs...
+export fn jj_cmul
+( reg double are aim bre bim
+) -> reg double, reg double
+{
+  reg complex a, b, c;
+  reg double cre, cim;
+  a = complex_pack(are, aim);
+  b = complex_pack(bre, bim);
+  c = complex_mul(a, b);
+  cre, cim = complex_unpack(c);
+  return cre, cim;
+}
+
+export fn j_cround
+( reg complex c
+) -> reg complex
+{
+  c = complex_myround(c);
+  return c;
+}
+
+// ABI for structs...
+export fn jj_cround
+( reg double are aim
+) -> reg double, reg double
+{
+  reg complex a, c;
+  reg double cre, cim;
+  a = complex_pack(are, aim);
+  c = complex_myround(a);
+  cre, cim = complex_unpack(c);
+  return cre, cim;
+}
+
+export fn j_ctrunc
+( reg complex c
+) -> reg complex
+{
+  c = complex_trunc(c);
+  return c;
+}
+
+// ABI for structs...
+export fn jj_ctrunc
+( reg double are aim
+) -> reg double, reg double
+{
+  reg complex a, c;
+  reg double cre, cim;
+  a = complex_pack(are, aim);
+  c = complex_trunc(a);
+  cre, cim = complex_unpack(c);
+  return cre, cim;
+}
+
+export fn j_cdist2
+( reg complex a b
+) -> reg double
+{
+  reg complex d;
+  d = complex_distance2(a, b);
+  return d;
+}
+
+// ABI for structs...
+export fn jj_cdist2
+( reg double are aim bre bim
+) -> reg double
+{
+  reg complex a, b;
+  reg double d;
+  a = complex_pack(are, aim);
+  b = complex_pack(bre, bim);
+  d = complex_distance2(a, b);
+  return d;
+}
+

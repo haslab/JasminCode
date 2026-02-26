@@ -1,0 +1,156 @@
+/*
+dependencies:
+- avx2/keccak1600_fixedsizes.jinc from Keccak
+- parameter defs (cloudplus128_params.jinc or cloudplus192_params.jinc or cloudplus256_params.jinc)
+*/
+
+namespace A32 {
+  param int _ASIZE = 32;
+  from Keccak require "avx2/keccak1600_fixedsizes_ASIZE.jinc"
+}
+
+namespace A64 {
+  param int _ASIZE = 64;
+  from Keccak require "avx2/keccak1600_fixedsizes_ASIZE.jinc"
+}
+
+namespace Arej {
+  param int _ASIZE = Params::rejblocks * 136;
+  from Keccak require "avx2/keccak1600_fixedsizes_ASIZE.jinc"
+}
+
+namespace Aeta1 {
+  param int _ASIZE = (Params::m*Params::nbar*2*Params::eta1)/8;
+  from Keccak require "avx2/keccak1600_fixedsizes_ASIZE.jinc"
+}
+
+namespace Aeta2{
+  param int _ASIZE = (Params::mbar*(Params::n+Params::nbar)*2*Params::eta2)/8;
+  from Keccak require "avx2/keccak1600_fixedsizes_ASIZE.jinc"
+}
+
+namespace A80 {
+  param int _ASIZE = 80;
+  from Keccak require "avx2/keccak1600_fixedsizes_ASIZE.jinc"
+}
+
+namespace Apk{
+  param int _ASIZE = Params::pk;
+  from Keccak require "avx2/keccak1600_fixedsizes_ASIZE.jinc"
+}
+
+namespace Ass{
+  param int _ASIZE = Params::ss;
+  from Keccak require "avx2/keccak1600_fixedsizes_ASIZE.jinc"
+}
+
+namespace Actx{
+  param int _ASIZE = Params::ctx;
+  from Keccak require "avx2/keccak1600_fixedsizes_ASIZE.jinc"
+}
+
+inline fn H
+( reg mut ptr u8[32] h
+, reg const ptr u8[Params::pk] pk
+) -> reg ptr u8[32] /* h */
+{
+  reg u256[7] st;
+  st = __state_init_avx2();
+  st, _ = Apk::__absorb_avx2(st, 0, pk, SHA3, R136);
+  _, h = A32::__squeeze_avx2(st, h, R136);
+  return h;
+}
+
+inline fn G
+( reg mut ptr u8[64] h
+, reg const ptr u8[Params::ss] m
+, reg const ptr u8[32] hpk
+) -> reg ptr u8[64] /* h */
+{
+  reg u256[7] st;
+  inline int AT;
+  st = __state_init_avx2();
+  st, AT = Ass::__absorb_avx2(st, 0, m, 0, R72);
+  st, _ = A32::__absorb_avx2(st, AT, hpk, SHA3, R72);
+  _, h = A64::__squeeze_avx2(st, h, R72);
+  return h;
+}
+
+inline fn K
+( reg mut ptr u8[Params::ss] h
+, reg const ptr u8[32] k
+, reg const ptr u8[Params::ctx] c
+) -> reg ptr u8[Params::ss] /* h */
+{
+  reg u256[7] st;
+  inline int AT;
+  st = __state_init_avx2();
+  st, AT = A32::__absorb_avx2(st, 0, k, 0, R136);
+  st, _ = Actx::__absorb_avx2(st, AT, c, SHAKE, R136);
+  _, h = Ass::__squeeze_avx2(st, h, R136);
+  return h;
+}
+
+
+inline fn XOF_init
+( reg const ptr u8[32] r1
+) -> reg u256[7] /* state */
+{
+  reg u256[7] st;
+  st = __state_init_avx2();
+  st, _ = A32::__absorb_avx2(st, 0, r1, SHAKE, R136);
+  return st;
+}
+
+inline fn XOF_rejblocks
+( reg mut ptr u8[Params::rejblocks * 136] buf
+, reg u256[7] st
+) -> reg ptr u8[Params::rejblocks * 136]  /* buf */
+   , reg u256[7]
+{
+  st, buf = Arej::__squeeze_avx2(st, buf, R136);
+
+  return buf, st;
+}
+
+fn shake256_eta1
+( reg mut ptr u8[(Params::m*Params::nbar*2*Params::eta1)/8] buf
+, reg const ptr u8[32] seed
+) -> reg ptr u8[(Params::m*Params::nbar*2*Params::eta1)/8]  /* buf */
+{
+  reg u256[7] st;
+  st = __state_init_avx2();
+  st, _ = A32::__absorb_avx2(st, 0, seed, SHAKE, R136);
+  _, buf = Aeta1::__squeeze_avx2(st, buf, R136);
+
+  return buf;
+}
+
+fn shake256_eta2
+( reg mut ptr u8[(Params::mbar*(Params::n+Params::nbar)*2*Params::eta2)/8] buf
+, reg const ptr u8[32] seed
+) -> reg ptr u8[(Params::mbar*(Params::n+Params::nbar)*2*Params::eta2)/8]  /* buf */
+{
+  reg u256[7] st;
+  st = __state_init_avx2();
+  st, _ = A32::__absorb_avx2(st, 0, seed, SHAKE, R136);
+  _, buf = Aeta2::__squeeze_avx2(st, buf, R136);
+
+  return buf;
+}
+
+// funD('F','j_F',[argT.oarr(np.uint8,(80,)),argT.iarr(np.uint8,(32,))])
+fn F
+( reg mut ptr u8[80] r
+, reg const ptr u8[32] alpha
+) -> reg ptr u8[80] /* r */
+{
+  reg u256[7] st;
+  st = __state_init_avx2();
+  st, _ = A32::__absorb_avx2(st, 0, alpha, SHAKE, R136);
+  _, r = A80::__squeeze_avx2(st, r, R136);
+
+  return r;
+}
+
+

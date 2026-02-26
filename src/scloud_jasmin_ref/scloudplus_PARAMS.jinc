@@ -1,0 +1,13 @@
+/*
+dependencies:
+- complex.jinc
+- aes.jinc
+- avx2/keccak1600_fixedsizes.jinc from Keccak
+- parameter defs (cloudplus128_params.jinc or cloudplus192_params.jinc or cloudplus256_params.jinc)
+*/
+
+require "encode_PARAMS.jinc"
+require "sample_PARAMS.jinc"
+require "matrix_PARAMS.jinc"
+require "pke_PARAMS.jinc"
+require "kem_PARAMS.jinc"

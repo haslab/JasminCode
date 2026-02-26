@@ -1,0 +1,39 @@
+namespace Params {
+
+param int l = 128;
+param int ss = 16;
+param int m = 600;
+param int n = 600;
+param int mbar = 8;
+param int nbar = 8;
+param int logq = 12;
+param int logq1 = 9;
+param int logq2 = 7;
+param int h1 = 150;
+param int h2 = 150;
+param int eta1 = 7;
+param int eta2 = 7;
+param int mu = 64;
+param int mu8 = mu/8;
+param int tau = 3;
+param int subm = 2;
+param int block_number = 75;
+param int block_size = 4;
+param int block_rowlen = 300;
+param int c1 = 5400; // MBAR*N*LOGQ1/sizeof(uint8_t)
+param int c2 = 56;
+param int ctx = 5456;
+param int pk = 7216;
+param int pke_sk = 1200;
+param int kem_sk = 8480;
+param int m2 = 360000;
+param int m3 = 216000000;
+param int n2 = 360000;
+param int n3 = 216000000;
+param int mnin = 679;
+
+param int mnout = 816;
+param int rejblocks = 7;
+param int bm_size = 10; // 600,600 < 10*64 = 640
+
+}

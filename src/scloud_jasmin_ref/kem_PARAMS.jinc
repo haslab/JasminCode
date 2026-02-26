@@ -1,0 +1,156 @@
+/*
+dependencies:
+- double.jinc, complex.jinc, aes.jinc
+- parameter defs (cloudplus128_params.jinc or cloudplus192_params.jinc or cloudplus256_params.jinc)
+*/
+
+require "encode_PARAMS.jinc"
+require "sample_PARAMS.jinc"
+require "matrix_PARAMS.jinc"
+require "pke_PARAMS.jinc"
+require "scloudplus_keccak_PARAMS.jinc"
+
+inline fn copy_pk
+( reg mut ptr u8[Params::pk] dst
+, reg const ptr u8[Params::pk] src
+) -> reg ptr u8[Params::pk] /* dst */
+{
+  reg ui64 i;
+  i = 0;
+  while (i < Params::pk/8) { // Params::pk is a multiple of 8
+    dst[:u64 i] = src[:u64 i];
+    i = i + 1;
+  }
+  return dst;
+}
+
+fn kem_keygen
+( reg mut ptr u8[Params::pk] pk
+, reg mut ptr u8[Params::kem_sk] sk
+) -> reg ptr u8[Params::pk]  /* pk */
+   , reg ptr u8[Params::kem_sk] /* sk */
+{
+  stack u8[32] alpha;
+  reg ptr u8[Params::pke_sk] pke_sk;
+  reg ptr u8[Params::pk] pk_sk;
+  reg ptr u8[32] hpk, z;
+
+  () = #spill();
+  pke_sk = sk[0:Params::pke_sk];
+  alpha = #randombytes(alpha);
+  pk, pke_sk = keygen(pk, pke_sk, alpha);
+  sk[0:Params::pke_sk] = pke_sk;
+  //sk[Params::pke_sk:Params::pk] = #copy(pk);
+  pk_sk = sk[Params::pke_sk:Params::pk];
+  pk_sk = copy_pk(pk_sk, pk);
+  sk[Params::pke_sk:Params::pk] = pk_sk;
+  hpk = sk[Params::pke_sk + Params::pk:32];
+  hpk = H(hpk, pk);
+  sk[Params::pke_sk + Params::pk : 32] = hpk;
+  
+  z = sk[Params::pke_sk + Params::pk + 32: 32];
+  z = #randombytes(z);
+  sk[Params::pke_sk + Params::pk + 32: 32] = z;
+
+  return pk, sk;
+}
+
+fn kem_encaps
+( reg mut ptr u8[Params::c1+Params::c2] ctxt
+, reg mut ptr u8[Params::ss] ss
+, reg const ptr u8[Params::pk] pk
+) -> reg ptr u8[Params::c1+Params::c2] /* ctxt */
+    , reg ptr u8[Params::ss] /* ss */
+{
+  stack u8[Params::ss] m;
+  stack u8[64] rk;
+  stack u8[32] hpk;
+  reg ptr u8[32] r, k;
+
+  () = #spill(ss);
+  hpk = H(hpk, pk);
+  m = #randombytes(m);
+  rk = G(rk, m, hpk);
+  r = rk[0:32];
+  k = rk[32:32];
+  () = #spill(k);
+  ctxt = enc_derand(ctxt, pk, m, r);
+  () = #unspill(ss, k);
+  ss = K(ss, k, ctxt);
+
+  return ctxt, ss;
+}
+
+inline fn cmov_neq_ctxt
+( reg mut ptr u8[32] k
+, reg const ptr u8[32] z
+, reg const ptr u8[Params::c1+Params::c2] ctxt
+, reg const ptr u8[Params::c1+Params::c2] ctxt1
+) -> reg ptr u8[32] /* k */
+{ 
+  reg u64 neq, i, t64;
+  reg u32 t32;
+  reg bool zf;
+  inline int j;
+
+  neq = 0;
+  i = 0;
+  if (Params::ctx % 8 != 0) { // Params::l == 256
+    while (i < Params::ctx-8) {
+      t64 = ctxt.[:u64 i];
+      t64 = t64 ^ ctxt1.[:u64 i];
+      neq = neq | t64;
+      i = i + 8;
+    }
+    // last 4 bytes (Params::ctx % 8 == 4)
+    t32 = ctxt.[:u32 i];
+    t32 = t32 ^ ctxt1.[:u32 i];
+    t64 = (64u) t32;
+    neq = neq | t64;
+  } else {
+    while (i < Params::ctx) { // Params::l == 128 or 192
+      t64 = ctxt.[:u64 i];
+      t64 = t64 ^ ctxt1.[:u64 i];
+      neq = neq | t64;
+      i = i + 8;
+    }
+  }
+  ?{ZF=zf}, neq = #AND(neq, neq);
+
+  for j = 0 to 4 {
+    t64 = k[:u64 j];
+    t64 = z[:u64 j] if !zf;
+    k[:u64 j] = t64;
+  }
+
+  return k;
+}
+
+fn kem_decaps
+( reg mut ptr u8[Params::ss] ss
+, reg const ptr u8[Params::kem_sk] sk
+, reg const ptr u8[Params::c1+Params::c2] ctxt
+) -> reg ptr u8[Params::ss] /* msg */
+{
+  stack u8[Params::ss] m;
+  stack u8[Params::c1+Params::c2] ctxt1;
+  stack u8[64] rk;
+  reg ptr u8[Params::pke_sk] pke_sk;
+  reg ptr u8[Params::pk] pk;
+  reg ptr u8[32] r, k, z;
+  
+  () = #spill(ss, sk, ctxt);
+  pke_sk = sk[0:Params::pke_sk];
+  m = dec(m, pke_sk, ctxt);
+  rk = G(rk, m, sk[Params::pke_sk + Params::pk:32]);
+  r = rk[0:32];
+  k = rk[32:32];
+  pk = sk[Params::pke_sk:Params::pk];
+  ctxt1 = enc_derand(ctxt1, pk, m, r);
+  () = #unspill(ss, sk, ctxt);
+  z = sk[Params::pke_sk + Params::pk + 32: 32];
+  k = cmov_neq_ctxt(k, z, ctxt, ctxt1);
+  ss = K(ss, k, ctxt);
+
+  return ss;
+}

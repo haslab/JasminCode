@@ -1,0 +1,175 @@
+/*
+dependencies:
+- double.jinc, complex.jinc, aes.jinc
+- parameter defs (cloudplus128_params.jinc or cloudplus192_params.jinc or cloudplus256_params.jinc)
+*/
+
+require "encode_PARAMS.jinc"
+require "sample_PARAMS.jinc"
+require "matrix_PARAMS.jinc"
+
+
+inline fn keygen_plain
+( reg mut ptr u16[Params::m*Params::nbar] B
+, reg mut ptr u8[16] seedA
+, reg mut ptr u16[Params::nbar*Params::n] S
+, reg const ptr u8[32] alpha
+) -> reg ptr u16[Params::m*Params::nbar] /* B */
+   , reg ptr u8[16]                      /* seedA */
+   , reg ptr u16[Params::nbar*Params::n] /* S */
+{ stack u8[80] bufF;
+  stack u16[Params::m*Params::n] A;
+  stack u16[Params::m*Params::nbar] E;
+  reg ptr u8[32] r1, r2;
+
+  bufF = F(bufF, alpha);
+  seedA = #copy(bufF[0:16]);
+  r1 = bufF[16:32];
+  r2 = bufF[48:32];
+
+  A = genMat(A, seedA);
+  () = #spill(r2, B, seedA);
+  S = samplepsi(S, r1);
+  () = #unspill(r2);
+  E = sampleeta1(E, r2);
+
+  () = #unspill(B);
+  B = AxStxE(B, A, S, E);
+  () = #unspill(seedA);
+  return B, seedA, S;
+}
+
+fn keygen
+( reg mut ptr u8[Params::pk] pk
+, reg mut ptr u8[Params::pke_sk] sk
+, reg const ptr u8[32] alpha
+) -> reg ptr u8[Params::pk]  /* pk */
+   , reg ptr u8[Params::pke_sk] /* sk */
+{
+  stack u16[Params::nbar*Params::n] S;
+  stack u16[Params::m*Params::nbar] B;
+  reg ptr u8[16] seedA;
+  reg ptr u8[Params::pk-16] Bbytes;
+
+  () = #spill(pk, sk);
+  seedA = pk[Params::pk-16:16];
+  B, seedA, S = keygen_plain(B, seedA, S, alpha);
+  () = #unspill(pk);
+  pk[Params::pk-16:16] = seedA;
+  Bbytes = pk[0:Params::pk-16];
+  Bbytes = packpk(Bbytes, B);
+  pk[0:Params::pk-16] = Bbytes;
+
+  () = #unspill(sk);
+  sk = packsk(sk, S);
+
+  return pk, sk;
+}
+
+inline fn enc_derand_plain
+( reg mut ptr u16[Params::mbar*Params::n] C1
+, reg mut ptr u16[Params::mbar*Params::nbar] C2
+, reg const ptr u16[Params::m*Params::nbar] B
+, reg const ptr u8[16] seedA
+, reg const ptr u8[Params::ss] msg
+, reg const ptr u8[32] coins
+) -> reg ptr u16[Params::mbar*Params::n]    /* C1 */
+   , reg ptr u16[Params::mbar*Params::nbar] /* C2 */
+{
+  stack u16[Params::m*Params::n] A;
+  stack u16[Params::mbar*Params::m] S;
+  stack u16[Params::mbar*Params::n] E1;
+  stack u16[Params::mbar*Params::nbar] E2;
+  stack u16[Params::mbar*Params::nbar] M;
+  stack u8[80] bufF;
+  reg ptr u8[32] r1, r2;
+
+  A = genMat(A, seedA);
+
+  M = _msgencode(M, msg);
+  bufF = F(bufF,coins);
+  r1 = bufF[16+0:32]; // C-reference uses bufF[0:32]!!!
+  () = #spill(C1, C2, B);
+  S = samplephi(S, r1);
+  r2 = bufF[16+32:32]; // C-reference uses bufF[32:32]!!!
+  E1, E2 = sampleeta2(E1, E2, r2);
+
+  () = #unspill(C1);
+  C1 = SxAxE(C1, S, A, E1);
+  C1 = compressc1(C1);
+  () = #unspill(B, C2);
+  C2 = SxBxExM(C2, S, B, E2, M);
+  C2 = compressc2(C2);
+
+  return C1, C2;
+}
+
+fn enc_derand
+( reg mut ptr u8[Params::ctx] ctxt
+, reg const ptr u8[Params::pk] pk
+, reg const ptr u8[Params::ss] msg
+, reg const ptr u8[32] coins
+) -> reg ptr u8[Params::c1+Params::c2] /* ctxt */
+{
+  stack u16[Params::m*Params::nbar] B;
+  stack u16[Params::mbar*Params::n] C1;
+  stack u16[Params::mbar*Params::nbar] C2;
+  reg ptr u8[16] seedA;
+  reg ptr u8[Params::c1] c1;
+  reg ptr u8[Params::c2] c2;
+
+  () = #spill(ctxt);
+  seedA = pk[Params::pk-16:16];
+  B = unpackpk(B, pk[0:Params::pk-16]);
+  C1, C2 = enc_derand_plain(C1, C2, B, seedA, msg, coins);
+
+  () = #unspill(ctxt);
+  c1 = ctxt[0:Params::c1];
+  c1 = packc1(c1, C1);
+  ctxt[0:Params::c1] = c1;
+  c2 = ctxt[Params::c1:Params::c2];
+  c2 = packc2(c2, C2);
+  ctxt[Params::c1:Params::c2] = c2;
+
+  return ctxt;
+}
+
+fn dec_plain
+( reg mut ptr u8[Params::l/8] msg
+, reg const ptr u16[Params::nbar*Params::n] S
+, reg const ptr u16[Params::mbar*Params::n] C1
+, reg const ptr u16[Params::mbar*Params::nbar] C2
+) -> reg ptr u8[Params::l/8] /* msg */
+{
+  stack u16[Params::mbar*Params::nbar] D;
+
+  D = C2xC1xS(D, C2, C1, S);
+  msg = _msgdecode(msg, D);
+
+  return msg;
+}
+
+fn dec
+( reg mut ptr u8[Params::l/8] msg
+, reg const ptr u8[Params::pke_sk] sk
+, reg const ptr u8[Params::c1+Params::c2] ctxt
+) -> reg ptr u8[Params::l/8] /* msg */
+{
+  stack u16[Params::mbar*Params::n] C1;
+  stack u16[Params::mbar*Params::nbar] C2;
+  stack u16[Params::nbar*Params::n] S;
+  reg ptr u8[Params::c1] c1;
+  reg ptr u8[Params::c2] c2;
+
+  S = unpacksk(S, sk);
+  c1 = ctxt[0:Params::c1];
+  C1 = unpackc1(C1, c1);
+  C1 = decompressc1(C1);
+  c2 = ctxt[Params::c1:Params::c2];
+  C2 = unpackc2(C2, c2);
+  C2 = decompressc2(C2);
+
+  msg = dec_plain(msg, S, C1, C2);
+
+  return msg;
+}

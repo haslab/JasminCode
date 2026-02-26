@@ -1,0 +1,114 @@
+/* DEPENDENCIES: */
+//require "complex.jinc"
+//param int BW = 4/8/16/32
+//fn fRec : complex[BW/4], complex[BW/4] -> complex[BW/4]
+
+param int tlen = BW/2;
+param int halftlen = BW/4;
+
+fn bdd_bw
+( reg mut ptr complex[tlen] y
+, reg const ptr complex[tlen] t
+) -> reg ptr complex[tlen]
+{
+  inline int i;
+
+  reg ptr complex[halftlen] t1, t2, y1, y2, z1, z2;
+  stack complex[tlen] z;
+  stack complex[halftlen] tmp;
+  reg complex c1, c2, c3, c4, base0, base1;
+  reg double sum1, sum2, dist1, dist2, dmask;
+  reg u64 mask;
+
+  base1 = complex_one_one;
+  base0 = complex_half_minushalf;
+
+  t1 = t[0:halftlen];
+  t2 = t[halftlen:halftlen];
+  y1 = y[0:halftlen];
+  y2 = y[halftlen:halftlen];
+  z1 = z[0:halftlen];
+  z2 = z[halftlen:halftlen];
+
+  y1=y1; t1=t1;
+  () = #spill(t,y,t1,t2,y2,z1,z2,base0,base1);
+  y1 = fRec(y1,t1);
+  () = #spill(y1);
+
+  () = #unspill(t2,z2);
+  z2 = fRec(z2,t2);
+  () = #spill(z2);
+
+  () = #unspill(t2,y1,base0);
+  for i = 0 to halftlen {
+    c1 = t2[i];
+    c2 = y1[i];
+    c1 = complex_sub(c1,c2);
+    c1 = complex_mul(c1, base0);
+    tmp[i] = c1;
+  }
+
+  () = #unspill(z1);
+  z1 = fRec(z1, tmp);
+  () = #spill(z1);
+
+  () = #unspill(t1,z2,base0);
+  for i = 0 to halftlen {
+    c1 = t1[i];
+    c2 = z2[i];
+    c1 = complex_sub(c1,c2);
+    c1 = complex_mul(c1, base0);
+    tmp[i] = c1;
+  }
+
+  () = #unspill(y2);
+  y2 = fRec(y2, tmp);
+
+  () = #unspill(y1,z1,z2,base1);
+  for i = 0 to halftlen {
+    c1 = y1[i];
+    c2 = z1[i];
+    c2 = complex_mul(c2, base1);
+    c1 = complex_add(c1,c2);
+    c3 = z2[i];
+    c4 = y2[i];
+    c4 = complex_mul(c4, base1);
+    c3 = complex_add(c3,c4);
+    y2[i] = c1;
+    z1[i] = c3;
+  }
+
+  () = #unspill(t,y);
+  // out1 from spec:
+  y[0:halftlen] = y1;
+  y[halftlen:halftlen] = y2;
+
+  // out2 from spec:
+  z[0:halftlen] = z1;
+  z[halftlen:halftlen] = z2;
+
+  // Euclidean distance
+  sum1 = double_zero;
+  sum2 = double_zero;
+  for i = 0 to tlen {
+    c1 = y[i];
+    c2 = z[i];
+    c3 = t[i];
+    dist1 = complex_distance2(c1,c3);
+    sum1 = double_add(sum1, dist1);
+    dist2 = complex_distance2(c2,c3);
+    sum2 = double_add(sum2, dist2);
+  }
+
+  dmask = double_lt(sum1, sum2);
+  mask = double_cmpmask(dmask);
+  if (mask == 0) {
+   for i = 0 to tlen {
+    c1 = z[i];
+    y[i] = c1;
+   }
+  }
+
+  return y;
+}
+

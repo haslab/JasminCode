@@ -1,0 +1,7 @@
+require "complex.jinc"
+require "aes.jinc"
+from Keccak require "avx2/keccak1600_fixedsizes.jinc"
+
+require "scloudplus192_params.jinc"
+
+require "scloudplus_PARAMS.jazz"

@@ -1,0 +1,181 @@
+/*
+dependencies:
+- parameter defs (cloudplus128_params.jinc or cloudplus192_params.jinc or cloudplus256_params.jinc)
+*/
+
+// B = A*S + E
+fn AxStxE
+( reg mut ptr u16[Params::m*Params::nbar] B
+, reg const ptr u16[Params::m*Params::n] A
+, reg const ptr u16[Params::nbar*Params::n] S
+, reg const ptr u16[Params::m*Params::nbar] E
+) -> reg ptr u16[Params::m*Params::nbar] /* B */
+{
+  reg u64 i, j, k, o, kk;
+  reg u32 x, y, s;
+
+  o = 0; // E idx
+  i = 0; // A idx
+  while ( i < Params::m*Params::n ) {
+    j = 0; // S idx
+    while ( j < Params::nbar*Params::n ) {
+      s = (32u) E[o];
+      k = 0;
+      while ( k < Params::n ) {
+        kk = k;
+        kk += i;
+        x = (32u) A[kk];
+        kk = k;
+        kk += j;
+        y = (32u) S[kk];
+        x = x*y;
+        s += x;
+        k += 1;
+      }
+      B[o] = (16u)s;
+      o += 1;
+      j += Params::n;
+    }
+    i += Params::n;
+  }
+  return B;
+}
+
+// C1 = S * A + E1
+fn SxAxE
+( reg mut ptr u16[Params::mbar*Params::n] C1
+, reg const ptr u16[Params::mbar*Params::m] S
+, reg const ptr u16[Params::m*Params::n] A
+, reg const ptr u16[Params::mbar*Params::n] E1
+) -> reg ptr u16[Params::mbar*Params::n] /* C1 */
+{
+  reg u64 i, j, k, o, kk, jj;
+  reg u32 x, y;
+  reg u16 t;
+
+  o = 0; // C1 idx
+  i = 0; // S idx
+  while ( i < Params::mbar*Params::m ) {
+    k = 0;
+    while ( k < Params::n) {
+      kk = k;
+      kk += o;
+      t = E1[kk];
+      C1[kk] = t;
+      k += 1;
+    }
+    j = 0; // B idx
+    jj = 0;
+    while ( j < Params::m ) { // j <- [0..n[, jj <- [0,n..m*n[
+      kk = j;
+      kk += i;
+      x = (32u) S[kk];
+      k = 0;
+      while ( k < Params::n ) {
+        kk = k;
+        kk += jj;
+        y = (32u) A[kk];
+        y = y*x;
+        kk = k;
+        kk += o;
+        C1[kk] += (16u) y;
+        k += 1;
+      }
+      j += 1;
+      jj += Params::n;
+    }
+    o += Params::n;
+    i += Params::m;
+  }
+  return C1;
+}
+
+// C2 = S * B + E2 + M
+fn SxBxExM
+( reg mut ptr u16[Params::mbar*Params::nbar] C2
+, reg const ptr u16[Params::mbar*Params::m] S
+, reg const ptr u16[Params::m*Params::nbar] B
+, reg const ptr u16[Params::mbar*Params::nbar] E2
+, reg const ptr u16[Params::mbar*Params::nbar] M
+) -> reg ptr u16[Params::mbar*Params::nbar] /* C2 */
+{
+  reg u64 i, j, k, o, kk, jj;
+  reg u32 x, y;
+  reg u16 t;
+
+  o = 0; // C2 idx
+  i = 0; // S idx
+  while ( i < Params::mbar*Params::m ) {
+    k = 0;
+    while ( k < Params::nbar ) {
+      kk = k;
+      kk += o;
+      t = E2[kk];
+      C2[kk] = t;
+      t = M[kk];
+      C2[kk] += t;
+      k += 1;
+    }
+    j = 0; // B idx
+    jj = 0;
+    while ( j < Params::m ) { // j <- [0..m[, jj <- [0,nbar..nbar*m[
+      kk = j;
+      kk += i;
+      x = (32u) S[kk];
+      k = 0;
+      while ( k < Params::nbar ) {
+        kk = k;
+        kk += jj;
+        y = (32u) B[kk];
+        y = y*x;
+        kk = k;
+        kk += o;
+        C2[kk] += (16u) y;
+        k += 1;
+      }
+      j += 1;
+      jj += Params::nbar;
+    }
+    o += Params::nbar;
+    i += Params::m;
+  }
+  return C2;
+}
+
+// D = C2 - C1 * S
+fn C2xC1xS
+( reg mut ptr u16[Params::mbar*Params::nbar] D
+, reg const ptr u16[Params::mbar*Params::nbar] C2
+, reg const ptr u16[Params::mbar*Params::n] C1
+, reg const ptr u16[Params::nbar*Params::n] S
+) -> reg ptr u16[Params::mbar*Params::nbar] /* D */
+{
+  reg u64 i, j, k, o, kk;
+  reg u32 x, y, s;
+
+  o = 0; // E idx
+  i = 0; // A idx
+  while ( i < Params::mbar*Params::n ) {
+    j = 0; // S idx
+    while ( j < Params::nbar*Params::n ) {
+      s = (32u) C2[o];
+      k = 0;
+      while ( k < Params::n ) {
+        kk = k;
+        kk += i;
+        x = (32u) C1[kk];
+        kk = k;
+        kk += j;
+        y = (32u) S[kk];
+        x = x*y;
+        s -= x;
+        k += 1;
+      }
+      D[o] = s;
+      o += 1;
+      j += Params::n;
+    }
+    i += Params::n;
+  }
+  return D;
+}

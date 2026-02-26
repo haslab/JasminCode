@@ -1,0 +1,64 @@
+name: main
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  compile-jasmin:
+    runs-on: [self-hosted, linux, X64]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: compile
+        run: JASMINC=jasminc make -C src/scloud_jasmin_ref/
+
+  compile-cref:
+    runs-on: [self-hosted, linux, X64]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: compile
+        run: make -C src/scloud_cref/
+        
+  ref-tests:
+    runs-on: [self-hosted, linux, X64]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: compile
+        run: JASMINC=jasminc make -C src/scloud_jasmin_ref/
+      - name: run-memtests
+        run: make -C src/scloud_jasmin_ref/tests run-mem-tests
+      - name: run-pketests
+        run: make -C src/scloud_jasmin_ref/tests run-pke-tests
+      - name: run-pkemattests
+        run: make -C src/scloud_jasmin_ref/tests run-pke-mat-tests
+      - name: run-kemtests
+        run: make -C src/scloud_jasmin_ref/tests run-kem-tests
+        
+  j-unit-tests:
+    runs-on: [self-hosted, linux, X64]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: compile
+        run: JASMINC=jasminc make -C src/scloud_jasmin_ref/
+      - name: compile
+        run: make -C src/scloud_cref/
+      - name: compile
+        run: (cd src/scloud_python/ && micromamba run -n jcenv make jasmin_unit_tests)
+        
+        
+        

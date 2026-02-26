@@ -1,0 +1,1023 @@
+/*
+dependencies:
+- aes.jinc
+- avx2/keccak1600_fixedsizes.jinc from Keccak
+- parameter defs (cloudplus128_params.jinc or cloudplus192_params.jinc or cloudplus256_params.jinc)
+*/
+require "scloudplus_keccak_PARAMS.jinc"
+
+//
+// BINOMIAL NOISE
+//
+
+
+/* CBD1
+B = 01 01 01 01 01
+b0= .0.1.1.0.1
+X = 0110100110 (+)
+b1= .1.1.0.1.0
+Y = 00 01 10 00 10 (-)
+    -1  0  1 -1  1 
+*/
+
+// cbd1: u8 -> 4
+// cbd1: u16 -> 8
+// cbd1: u32 -> 16
+// cbd1: u64 -> 32        (224*u64)
+
+inline fn cbd1_32
+( reg mut ptr u16[32] batch
+, reg u64 x
+) -> reg ptr u16[32] /* batch */
+{
+  reg u64 y, t, mask, i;
+  reg u16 c;
+
+  mask = 0x5555555555555555;
+  y = mask;
+  t = x;
+  t &= mask;
+  y += t;
+  x >>= 1;
+  x &= mask;
+  y -= x;
+
+  i = 0;
+  while ( i < 32 ) {
+    c = (16u) y;
+    c &= 0x03;
+    c -= 1;
+    batch[i] = c;
+    y >>= 2;
+    i += 1;
+  }
+
+  return batch;
+}
+
+/* CBD2
+B = 0010 0010
+b0= 0101 0000
+X = 0100 0010
+*/
+// cbd2: u8 -> 2
+// cbd2: u16 -> 4
+// cbd2: u32 -> 8
+// cbd2: u64 -> 16        (464*u64) (840*u64)
+
+inline fn cbd2_4
+( reg mut ptr u16[4] batch
+, reg u16 x
+) -> reg ptr u16[4] /* batch */
+{
+  reg u64 i;
+  reg u16 y, t, mask;
+  reg u16 c;
+
+  mask = 0x1111;
+  y = 0x2222;
+  // add bits
+  t = x;
+  t &= mask;
+  y += t;
+  x >>= 1;
+  t = x;
+  t &= mask;
+  y += t;
+  // sub bits
+  x >>= 1;
+  t = x;
+  t &= mask;
+  y -= t;
+  x >>= 1;
+  x &= mask;
+  y -= x;
+
+  i = 0;
+  while ( i < 4 ) {
+    c = y;
+    c &= 0x0F;
+    c -= 2;
+    batch[i] = c;
+    y >>= 4;
+    i += 1;
+  }
+
+  return batch;
+}
+
+inline fn cbd2_16
+( reg mut ptr u16[16] batch
+, reg u64 x
+// , inline int N // 0 < N <= 16
+) -> reg ptr u16[16] /* batch */
+{
+  reg u64 y, t, mask, i;
+  reg u16 c;
+
+  mask = 0x1111111111111111;
+  y = 0x2222222222222222;
+  // add bits
+  t = x;
+  t &= mask;
+  y += t;
+  x >>= 1;
+  t = x;
+  t &= mask;
+  y += t;
+  // sub bits
+  x >>= 1;
+  t = x;
+  t &= mask;
+  y -= t;
+  x >>= 1;
+  x &= mask;
+  y -= x;
+
+  i = 0;
+  while ( i < 16 ) {
+    c = (16u) y;
+    c &= 0x0F;
+    c -= 2;
+    batch[i] = c;
+    y >>= 4;
+    i += 1;
+  }
+
+  return batch;
+}
+
+
+/* CBD3
+B = 000011 000011
+*/
+// cbd3: 3*u8 (u32) -> 4    (ou 3124*u32)
+// cbd3: 6*u8 (u64) -> 8    (1562*u64)
+// cbd3: 10*6 (u64) -> 10   ()
+
+inline fn cbd3_8
+( reg mut ptr u16[8] batch
+, reg u64 x
+) -> reg ptr u16[8] /* batch */
+{
+  reg u64 y, t, mask, i;
+  reg u16 c;
+  inline int k;
+
+  mask = 0x0000041041041041;
+  y = 0x00000c30c30c30c3;
+  // add bits
+  for k = 0 to 3 {
+    t = x;
+    t &= mask;
+    y += t;
+    x >>= 1;
+  }
+  // sub bits
+  for k = 0 to 3 {
+    t = x;
+    t &= mask;
+    y -= t;
+    x >>= 1;
+  }
+
+  i = 0;
+  while ( i < 8 ) {
+    c = (16u) y;
+    c &= 0x3F;
+    c -= 3;
+    batch[i] = c;
+    y >>= 6;
+    i += 1;
+  }
+
+  return batch;
+}
+
+// cbd7: 7*u8 (u64) -> 4    (1200*u64)
+
+
+// cbd1: 32
+// cbd2: 16
+// cbd3: 8 (10)
+// cbd7: 4
+// eta1: m*nbar (7, 2, 3)
+//      128: 600 * 8   = 4800   (1200 * 4)
+//      191: 928 * 8   = 7424   (464 * 16)
+//      256: 1136 * 11 = 12496  (1562 * 8) (1248*10 + 8 + 8)
+// eta2: mbar*n     (7, 1, 2)
+//      128: 8*600    = 4800
+//      191: 8*896    = 7168   (224 * 32)
+//      256: 12*1120  = 13440  (840 * 16)
+// eta2: mbar*nbar  (7, 1, 2)
+//      128: 8 * 8   = 64      (16*4)
+//      191: 8 * 8   = 64      (2*32)
+//      256: 12*11   = 132     (8*16 + 4)
+
+inline fn cbd7_4
+( reg mut ptr u16[4] batch
+, reg u64 x
+) -> reg ptr u16[4] /* batch */
+{
+  reg u64 y, t, mask; //, i;
+  reg u16 c;
+  inline int k;
+
+  mask = 0x0000040010004001;
+  y = 0x00001c007001c007;
+  // add bits
+  for k = 0 to 7 {
+    t = x;
+    t &= mask;
+    y += t;
+    x >>= 1;
+  }
+  // sub bits
+  for k = 0 to 7 {
+    t = x;
+    t &= mask;
+    y -= t;
+    x >>= 1;
+  }
+
+//  i = 0;
+//  while ( i < 4 ) {
+  for k = 0 to 4 {
+    c = (16u) y;
+    c &= 0x3FFF;
+    c -= 7;
+    batch[k] = c;
+    y >>= 2*7;
+//    i += 1;
+  }
+
+  return batch;
+}
+
+// funD('sampleeta1','j_sampleeta1',[argT.oarr(np.uint16,(P.m,P.nbar)),argT.iarr(np.uint8,(32,))])
+fn sampleeta1
+( reg mut ptr u16[Params::m*Params::nbar] E
+, reg const ptr u8[32] r2
+) -> reg ptr u16[Params::m*Params::nbar]  /* E */
+{
+  reg u64 x, i, j;
+  stack u8[(Params::m*Params::nbar*2*Params::eta1)/8] buf;
+  reg ptr u16[16] batch16;
+  reg ptr u16[8] batch8;
+  reg ptr u16[4] batch4;
+  inline int buflen = (Params::m*Params::nbar*2*Params::eta1)/8;
+
+  buf = shake256_eta1(buf, r2);
+
+  if ( Params::eta1 == 2 ) { // Params::l == 192
+    i = 0;
+    // remark: 16 %| Params::m*Params::nbar
+    while ( i < buflen ) {
+      x = buf.[:u64 i];
+      batch16 = E[2*i:16];
+      batch16 = cbd2_16(batch16, x);
+      E[2*i:16] = batch16;
+      i += 8;
+    }
+  } else if ( Params::eta1 == 3 ) { // Params::l == 256
+    i = 0;
+    x = buf.[:u64 0];
+    batch8 = E[0:8];
+    batch8 = cbd3_8(batch8, x);
+    E[0:8] = batch8;
+    i += 4;
+    // remark: 8 %| Params::m*Params::nbar
+    j = 8;
+    while ( i < buflen-2 ) {
+      x = buf.[:u64 i];
+      x >>= 16;
+      batch8 = E[j:8];
+      batch8 = cbd3_8(batch8, x);
+      E[j:8] = batch8;
+      j += 8;
+      i += 6;
+    }
+  } else if ( Params::eta1 == 7 ) { // Params::l == 128
+    i = 0;
+    x = buf.[:u64 0];
+    batch4 = E[0:4];
+    batch4 = cbd7_4(batch4, x);
+    E[0:4] = batch4;
+    i += 6;
+    // remark: 4%| Params::m*Params::nbar
+    j = 4;
+    while ( i < buflen-1 ) {
+      x = buf.[:u64 i];
+      x >>= 8;
+      batch4 = E[j:4];
+      batch4 = cbd7_4(batch4, x);
+      E[j:4] = batch4;
+      j += 4;
+      i += 7;
+    }
+  }
+  return E;
+}
+
+// funD('sampleeta2','j_sampleeta2',[argT.oarr(np.uint16,(P.mbar,P.n)),argT.oarr(np.uint16,(P.mbar,P.nbar)),argT.iarr(np.uint8,(32,))])
+fn sampleeta2
+( reg mut ptr u16[Params::mbar*Params::n] E1
+, reg mut ptr u16[Params::mbar*Params::nbar] E2
+, reg const ptr u8[32] r2
+) -> reg ptr u16[Params::mbar*Params::n]     /* E1 */
+   , reg ptr u16[Params::mbar*Params::nbar]  /* E2 */
+{
+  reg u64 x, i, j;
+  reg u16 x16;
+  stack u8[(Params::mbar*(Params::n+Params::nbar)*2*Params::eta2)/8] buf;
+  reg ptr u16[32] batch32;
+  reg ptr u16[16] batch16;
+  reg ptr u16[4] batch4;
+
+  buf = shake256_eta2(buf, r2);
+
+  if ( Params::eta2 == 1 ) { // Params::l == 192
+    i = 0;
+    // remark: 32 %| Params::mbar*Params::n
+    j = 0;
+    while ( j < Params::mbar*Params::n ) {
+      x = buf.[:u64 i];
+      batch32 = E1[j:32];
+      batch32 = cbd1_32(batch32, x);
+      E1[j:32] = batch32;
+      j += 32;
+      i += 8;
+    }
+    // remark: 32 %| Params::mbar*Params::nbar
+    j = 0;
+    while ( j < Params::mbar*Params::nbar ) {
+      x = buf.[:u64 i];
+      batch32 = E2[j:32];
+      batch32 = cbd1_32(batch32, x);
+      E2[j:32] = batch32;
+      j += 32;
+      i += 8;
+    }
+  } else if ( Params::eta2 == 2 ) { // Params::l == 256
+    i = 0;
+    // remark: 16 %| Params::mbar*Params::n
+    j = 0;
+    while ( j < Params::mbar*Params::n ) {
+      x = buf.[:u64 i];
+      batch16 = E1[j:16];
+      batch16 = cbd2_16(batch16, x);
+      E1[j:16] = batch16;
+      j += 16;
+      i += 8;
+    }
+    // remark: 16 %| (Params::mbar*Params::nbar - 4)
+    j = 0;
+    while ( j < Params::mbar*Params::nbar-4 ) {
+      x = buf.[:u64 i];
+      batch16 = E2[j:16];
+      batch16 = cbd2_16(batch16, x);
+      E2[j:16] = batch16;
+      j += 16;
+      i += 8;
+    }
+    // last 4 entries of E2:
+    x16 = buf.[:u16 i];
+    batch4 = E2[j:4];
+    batch4 = cbd2_4(batch4, x16);
+    E2[j:4] = batch4;
+  } else if ( Params::eta2 == 7 ) { // Params::l == 128
+    i = 0;
+    x = buf.[:u64 0];
+    batch4 = E1[0:4];
+    batch4 = cbd7_4(batch4, x);
+    E1[0:4] = batch4;
+    i += 6;
+    // remark: 4 %| Params::mbar*Params::n
+    j = 4;
+    while ( j < Params::mbar*Params::n ) {
+      x = buf.[:u64 i];
+      x >>= 8;
+      batch4 = E1[j:4];
+      batch4 = cbd7_4(batch4, x);
+      E1[j:4] = batch4;
+      j += 4;
+      i += 7;
+    }
+    // remark: 4 %| Params::mbar*Params::nbar
+    j = 0;
+    while ( j < Params::mbar*Params::nbar ) {
+      x = buf.[:u64 i];
+      x >>= 8;
+      batch4 = E2[j:4];
+      batch4 = cbd7_4(batch4, x);
+      E2[j:4] = batch4;
+      j += 4;
+      i += 7;
+    }
+  }
+  return E1, E2;
+}
+
+//
+// REJECTION SAMPLING
+//
+
+inline fn div600_u32
+( reg u32 x
+) -> reg u32
+{
+  reg u64 y;
+  y = (64u) x;
+  y *= 0x1b4e81b5;
+  y >>= 38;
+  x = (32u) y;
+  return x;
+}
+
+inline fn div1120_u64
+( reg u64 x
+) -> reg u64
+{
+  reg u64 hi, lo, c;
+  c = 0xea0ea0ea0ea0ea0f;
+  x = x;
+  hi, lo = x * c;
+  hi >>= 10;
+  hi = hi;
+  return hi;
+}
+
+inline fn div1136_u64
+( reg u64 x
+) -> reg u64
+{
+  reg u64 hi, lo, c;
+  c = 0xe6c2b4481cd8569;
+  x = x;
+  x >>= 4;
+  hi, lo = x * c;
+  hi >>= 2;
+  hi = hi;
+  return hi;
+}
+
+inline fn rej_3_600
+( reg mut ptr u16[Params::mnout] out
+, reg u64 outlen
+, reg u32 x
+) -> reg ptr u16[Params::mnout]  /* out */
+   , reg u64                     /* outlen */
+{
+  reg u32 q, r;
+  if ( x < 600*600*600 ) {
+    q = div600_u32(x);
+    r = x;
+    x = q;
+    q *= 600;
+    r -= q;
+    out[outlen] = r;
+    q = div600_u32(x);
+    r = x;
+    x = q;
+    q *= 600;
+    r -= q;
+    out[outlen + 1] = r;
+    out[outlen + 2] = x;
+    outlen += 3;
+  }
+  return out, outlen;
+}
+
+inline fn rej_5_1120
+( reg mut ptr u16[Params::mnout] out
+, reg u64 outlen
+, reg u64 x
+) -> reg ptr u16[Params::mnout]  /* out */
+   , reg u64                     /* outlen */
+{
+  reg u64 q, r, bound;
+  bound = 1120*1120*1120*1120*1120;
+  if ( x < bound ) {
+    q = div1120_u64(x);
+    r = x;
+    x = q;
+    q *= 1120;
+    r -= q;
+    out[outlen] = r;
+    q = div1120_u64(x);
+    r = x;
+    x = q;
+    q *= 1120;
+    r -= q;
+    out[outlen + 1] = r;
+    q = div1120_u64(x);
+    r = x;
+    x = q;
+    q *= 1120;
+    r -= q;
+    out[outlen + 2] = r;
+    q = div1120_u64(x);
+    r = x;
+    x = q;
+    q *= 1120;
+    r -= q;
+    out[outlen + 3] = r;
+    out[outlen + 4] = x;
+    outlen += 5;
+  }
+  return out, outlen;
+}
+
+inline fn rej_5_1136
+( reg mut ptr u16[Params::mnout] out
+, reg u64 outlen
+, reg u64 x
+) -> reg ptr u16[Params::mnout]  /* out */
+   , reg u64                     /* outlen */
+{
+  reg u64 q, r, bound;
+  bound = 1136*1136*1136*1136*1136;
+  if ( x < bound ) {
+    q = div1136_u64(x);
+    r = x;
+    x = q;
+    q *= 1136;
+    r -= q;
+    out[outlen] = r;
+    q = div1136_u64(x);
+    r = x;
+    x = q;
+    q *= 1136;
+    r -= q;
+    out[outlen + 1] = r;
+    q = div1136_u64(x);
+    r = x;
+    x = q;
+    q *= 1136;
+    r -= q;
+    out[outlen + 2] = r;
+    q = div1136_u64(x);
+    r = x;
+    x = q;
+    q *= 1136;
+    r -= q;
+    out[outlen + 3] = r;
+    out[outlen + 4] = x;
+    outlen += 5;
+  }
+  return out, outlen;
+}
+
+inline fn rej_6_10bit
+( reg mut ptr u16[Params::mnout] out
+, reg u64 outlen
+, reg u64 x
+, inline int n
+) -> reg ptr u16[Params::mnout]  /* out */
+   , reg u64                     /* outlen */
+{
+  inline int i;
+  reg u64 t;
+  for i = 0 to 6 {
+    t = x;
+    t &= 0x3FF;
+    x >>= 10;
+    if ( t < n ) {
+      out[outlen] = (16u) t;
+      outlen += 1;
+    }
+  }
+  return out, outlen;
+}
+
+inline fn rej_4_10bit
+( reg mut ptr u16[Params::mnout] out
+, reg u64 outlen
+, reg u64 x
+, inline int n
+) -> reg ptr u16[Params::mnout]  /* out */
+   , reg u64                     /* outlen */
+{
+  inline int i;
+  reg u64 t;
+  for i = 0 to 4 {
+    t = x;
+    t &= 0x3FF;
+    x >>= 10;
+    if ( t < n ) {
+      out[outlen] = (16u) t;
+      outlen += 1;
+    }
+  }
+  return out, outlen;
+}
+
+// funD('readu8tom','j_readu8tom',[argT.oarr(np.uint16,(P.mnout,)),argT.cty(ct.POINTER(ct.c_int)),argT.iarr(np.uint8,(5*136,))])
+inline fn rejection
+( reg mut ptr u16[Params::mnout] out
+, inline int bound
+, reg const ptr u8[Params::rejblocks*136] buf
+) -> reg mut ptr u16[Params::mnout] /* out */
+   , reg u64                        /* outlen */
+{
+  reg u64 i, outlen, tmp64;
+  reg u32 tmp32;
+  outlen = 0;
+  if ( bound == 600 && Params::rejblocks == 7 ) { // Params::l == 128
+    i = 0;
+    while ( i < Params::rejblocks*136 ) {
+      tmp32 = buf.[:u32 i];
+      tmp32 &= 0xFFFFFFF;
+      out, outlen = rej_3_600(out, outlen, tmp32);
+      tmp32 = buf.[:u32 i+3];
+      tmp32 >>= 4;
+      out, outlen = rej_3_600(out, outlen, tmp32);
+      i += 7;
+    }
+  } else if ( (bound == 928 || bound==896) && Params::rejblocks == 5 ) { // Params::l == 192
+    i = 0;
+    while ( i < (Params::rejblocks*136/15)*15 ) {
+      tmp64 = buf.[:u64 i];
+      tmp64 &= 0x0FFFFFFFFFFFFFFF;
+      out, outlen = rej_6_10bit(out, outlen, tmp64, bound);
+      tmp64 = buf.[:u64 i + 7];
+      tmp64 >>= 4;
+      out, outlen = rej_6_10bit(out, outlen, tmp64, bound);
+      i += 15;      
+    }
+    tmp64 = buf.[:u64 i - (8-Params::rejblocks*136%15)];
+    tmp64 >>= 8*(8-Params::rejblocks*136%15);
+    out, outlen = rej_4_10bit(out, outlen, tmp64, bound);    
+  } else if ( bound == 1120 && Params::rejblocks == 3 ) { // Params::l == 256 (n)
+    i = 0;
+    while ( i < Params::rejblocks*136 ) {
+      tmp64 = buf.[:u64 i];
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1120(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 6];
+      tmp64 >>= 3;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1120(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 12];
+      tmp64 >>= 6;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1120(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 19];
+      tmp64 >>= 1;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1120(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 25];
+      tmp64 >>= 4;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1120(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 31];
+      tmp64 >>= 7;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1120(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 38];
+      tmp64 >>= 2;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1120(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 44];
+      tmp64 >>= 5;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1120(out, outlen, tmp64);
+      i += 51;
+    }
+  } else if ( bound == 1136 && Params::rejblocks == 3 ) { // Params::l == 256 (m)
+    i = 0;
+    while ( i < Params::rejblocks*136 ) {
+      tmp64 = buf.[:u64 i];
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1136(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 6];
+      tmp64 >>= 3;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1136(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 12];
+      tmp64 >>= 6;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1136(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 19];
+      tmp64 >>= 1;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1136(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 25];
+      tmp64 >>= 4;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1136(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 31];
+      tmp64 >>= 7;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1136(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 38];
+      tmp64 >>= 2;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1136(out, outlen, tmp64);
+      tmp64 = buf.[:u64 i + 44];
+      tmp64 >>= 5;
+      tmp64 &= 0x7FFFFFFFFFFFF;
+      out, outlen = rej_5_1136(out, outlen, tmp64);
+      i += 51;
+    }
+  }
+  return out, outlen;
+}
+
+inline fn bm_reset
+( reg mut ptr u64[Params::bm_size] bm
+, reg mut ptr u64[Params::bm_size] bmn
+) -> reg ptr u64[Params::bm_size] /* bm */
+   , reg ptr u64[Params::bm_size] /* bmn */
+{
+  reg u64 i, zero;
+  zero = 0;
+  i = 0;
+  while ( i < Params::bm_size ) {
+    bm[i] = zero;
+    bmn[i] = zero;
+    i += 1;
+  }
+  return bm, bmn;
+}
+
+inline fn bm_set
+( reg mut ptr u64[Params::bm_size] bm
+, reg mut ptr u64[Params::bm_size] bmn
+, reg u64 idx
+, inline int bmn_flag
+) -> reg ptr u64[Params::bm_size] /* bm */
+   , reg ptr u64[Params::bm_size] /* bmn */
+   , reg u64 /* 0/1 new_element */
+{
+  reg u64 r, i, ti, tbmi, mask_idx, mask, maskn, zero, one;
+  reg u8 sh;
+  reg bool zf;
+
+  r = 0;
+  mask_idx = 1;
+  sh = (8u) idx;
+  mask_idx <<= (sh & 63);
+  idx >>= 6;  
+  i = 0;
+  while (i < Params::bm_size) {
+    one = 1;
+    mask = 0;
+    // index of interest: mask!=0, maskn!=0, r=1
+    ti = i;
+    ?{ZF=zf}, _ = #XOR(ti, idx);
+    mask = mask_idx if zf;
+    r = one if zf;
+    // check bit on entry
+    tbmi = bm[i];
+    zero = 0;
+    ?{ZF=zf}, _ = #AND(tbmi, mask); // 0
+    r = zero if !zf;     // ignore if already in the set
+    if (bmn_flag != 0) {
+      maskn = mask;
+      maskn = zero if !zf; // idem...
+      bmn[i] |= maskn;
+    }
+    bm[i] |= mask;       // redundant if already in the set
+    i += 1;
+  }
+
+  return bm, bmn, r;
+}
+
+inline fn bm_dump_n
+( reg mut ptr u16[Params::n] Si
+, reg const ptr u64[Params::bm_size] bm
+, reg const ptr u64[Params::bm_size] bmn
+) -> reg ptr u16[Params::n] /* Si */
+{
+  reg u64 i, j, mask, bmi, bmni;
+  reg u16 x, xneg;
+  reg u8 x8;
+  reg bool zf;
+
+  i = 0;
+  while ( i < Params::n / 64 ) {
+    bmi = bm[i];
+    bmni = bmn[i];
+    i <<= 6;
+    mask = 1;
+    j = 0;
+    while ( j < 64 ) {
+      ?{ZF=zf} = #TEST(bmi, mask);
+      x8 = #SETcc(!zf);
+      x = (16u) x8;
+      xneg = x;
+      xneg = -xneg;
+      ?{ZF=zf} = #TEST(bmni, mask);
+      x = xneg if !zf;
+      Si[i] = x;
+      mask <<= 1;
+      i += 1;
+      j += 1;
+    }
+    i >>= 6;
+  }
+  bmi = bm[i];
+  bmni = bmn[i];
+  i <<= 6;
+  mask = 1;
+  j = 0;
+  while ( j < (Params::n % 64) ) {
+    ?{ZF=zf} = #TEST(bmi, mask);
+    x8 = #SETcc(!zf);
+    x = (16u) x8;
+    xneg = x;
+    xneg = -xneg;
+    ?{ZF=zf} = #TEST(bmni, mask);
+    x = xneg if !zf;
+    Si[i] = x;
+    mask <<= 1;
+    i += 1;
+    j += 1;
+  }
+  return Si;
+}
+
+inline fn bm_dump_m
+( reg mut ptr u16[Params::m] Si
+, reg const ptr u64[Params::bm_size] bm
+, reg const ptr u64[Params::bm_size] bmn
+) -> reg ptr u16[Params::m] /* Si */
+{
+  reg u64 i, j, mask, bmi, bmni;
+  reg u16 x, xneg;
+  reg u8 x8;
+  reg bool zf;
+
+  i = 0;
+  while ( i < Params::m / 64 ) {
+    bmi = bm[i];
+    bmni = bmn[i];
+    i <<= 6;
+    mask = 1;
+    j = 0;
+    while ( j < 64 ) {
+      ?{ZF=zf} = #TEST(bmi, mask);
+      x8 = #SETcc(!zf);
+      x = (16u) x8;
+      xneg = x;
+      xneg = -xneg;
+      ?{ZF=zf} = #TEST(bmni, mask);
+      x = xneg if !zf;
+      Si[i] = x;
+      mask <<= 1;
+      i += 1;
+      j += 1;
+    }
+    i >>= 6;
+  }
+  bmi = bm[i];
+  bmni = bmn[i];
+  i <<= 6;
+  mask = 1;
+  j = 0;
+  while ( j < (Params::m % 64) ) {
+    ?{ZF=zf} = #TEST(bmi, mask);
+    x8 = #SETcc(!zf);
+    x = (16u) x8;
+    xneg = x;
+    xneg = -xneg;
+    ?{ZF=zf} = #TEST(bmni, mask);
+    x = xneg if !zf;
+    Si[i] = x;
+    mask <<= 1;
+    i += 1;
+    j += 1;
+  }
+  return Si;
+}
+
+// funD('samplepsi','j_samplepsi',[argT.oarr(np.uint16,(P.nbar,P.n)),argT.iarr(np.uint8,(32,))])
+fn samplepsi
+( reg mut ptr u16[Params::nbar*Params::n] S
+, reg const ptr u8[32] r1
+) -> reg mut ptr u16[Params::nbar*Params::n] /* S */
+{
+  reg u256[7] state;
+  reg u64 outlen, k, i, j, x, r;
+  stack u8[Params::rejblocks * 136] buf;
+  stack u16[Params::mnout] out;
+  stack u64[Params::bm_size] bm, bmn;
+  reg ptr u16[Params::n] Si;
+
+  state = XOF_init(r1);
+  buf, state = XOF_rejblocks(buf, state);
+  out, outlen = rejection(out, Params::n, buf);
+  k = 0;
+
+  i = 0;
+  while ( i < Params::nbar * Params::n ) {
+    bm, bmn = bm_reset(bm, bmn);
+    j = 0;
+    while ( j < Params::h1 ) {
+      while ( k == outlen ) {
+        buf, state = XOF_rejblocks(buf, state);
+        out, outlen = rejection(out, Params::n, buf);
+        k = 0;
+      }
+      x = (64u) out[k];
+      k += 1;
+      bm, bmn, r = bm_set(bm, bmn, x, 0);
+      j += r;
+    }
+    while ( j < 2*Params::h1) {
+      while ( k == outlen ) {
+        buf, state = XOF_rejblocks(buf, state);
+        out, outlen = rejection(out, Params::n, buf);
+        k = 0;
+      }
+      x = (64u) out[k];
+      k += 1;
+      bm, bmn, r = bm_set(bm, bmn, x, 1);
+      j += r;
+    }
+    Si = S[i:Params::n];
+    Si = bm_dump_n(Si, bm, bmn);
+    S[i:Params::n] = Si;
+    i += Params::n;
+  }
+  return S;
+}
+
+// funD('samplephi','j_samplephi',[argT.oarr(np.uint16,(P.mbar,P.m)),argT.iarr(np.uint8,(32,))])
+fn samplephi
+( reg mut ptr u16[Params::mbar*Params::m] S
+, reg const ptr u8[32] r1
+) -> reg mut ptr u16[Params::mbar*Params::m] /* S */
+{
+  reg u256[7] state;
+  reg u64 outlen, k, i, j, x, r;
+  stack u8[Params::rejblocks * 136] buf;
+  stack u16[Params::mnout] out;
+  stack u64[Params::bm_size] bm, bmn;
+  reg ptr u16[Params::m] Si;
+
+  state = XOF_init(r1);
+  buf, state = XOF_rejblocks(buf, state);
+  out, outlen = rejection(out, Params::m, buf);
+  k = 0;
+
+  i = 0;
+  while ( i < Params::mbar * Params::m ) {
+    bm, bmn = bm_reset(bm, bmn);
+    j = 0;
+    while ( j < Params::h2 ) {
+      while ( k == outlen ) {
+        buf, state = XOF_rejblocks(buf, state);
+        out, outlen = rejection(out, Params::m, buf);
+        k = 0;
+      }
+      x = (64u) out[k];
+      k += 1;
+      bm, bmn, r = bm_set(bm, bmn, x, 0);
+      j += r;
+    }
+    while ( j < 2*Params::h2) {
+      while ( k == outlen ) {
+        buf, state = XOF_rejblocks(buf, state);
+        out, outlen = rejection(out, Params::m, buf);
+        k = 0;
+      }
+      x = (64u) out[k];
+      k += 1;
+      bm, bmn, r = bm_set(bm, bmn, x, 1);
+      j += r;
+    }
+    Si = S[i:Params::m];
+    Si = bm_dump_m(Si, bm, bmn);
+    S[i:Params::m] = Si;
+    i += Params::m;
+  }
+  return S;
+}
+
+// funD('genmat','j_genmat',[argT.oarr(np.uint16,(P.m,P.n)),argT.iarr(np.uint8,(32,))])
+fn genMat
+( reg mut ptr u16[Params::m*Params::n] A
+, reg const ptr u8[16] seedA
+) -> reg ptr u16[Params::m*Params::n] /* A */
+{
+  reg ui64 i;
+  reg u128 key, xin, xout, one128;
+  reg u128[11] rkeys;
+
+  i = 1;
+  one128 = #MOVD((64u)i);
+  xin = #set0_128();
+  key = seedA.[:u128 0];
+  rkeys = aes_key_schedule_128(key);
+  i = 0;
+  while ( i < 2*Params::m*Params::n ) { // obs: 8 %| Params::m*Params::n
+    xout = aes_rounds_128(rkeys, xin);
+    A.[:u128 i] = xout;
+    xin = #VPADD_4u32(xin,one128);
+    i += 16;
+  }
+  return A;
+}

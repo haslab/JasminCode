@@ -1,0 +1,43 @@
+namespace Params {
+
+param int l = 256;
+param int ss = 32;
+param int m = 1136;
+param int n = 1120;
+param int mbar = 12;
+param int nbar = 11;
+param int logq = 12;
+param int logq1 = 10;
+param int logq2 = 7;
+param int h1 = 280;
+param int h2 = 284;
+param int eta1 = 3;
+param int eta2 = 2;
+param int mu = 64;
+param int mu8 = mu/8;
+param int tau = 3;
+param int subm = 4;
+param int block_number = 140;
+param int block_size = 4;
+param int block_rowlen = 560;
+param int c1 = 16800;
+param int c2 = 116;
+param int ctx = 16916;
+param int pk = 18760;
+param int pke_sk = 3080;
+param int kem_sk = 21904;
+param int n2 = 1254400;
+param int n3 = 1404928000;
+param int n4 = 1573519360000;
+param int n5 = 1762341683200000;
+param int m2 = 1290496;
+param int m3 = 1466003456;
+param int m4 = 1665379926016;
+param int m5 = 1891871595954176;
+param int mnin = 680;
+
+param int mnout = 320;
+param int rejblocks = 3;
+param int bm_size = 18; // 1136,1120 < 18*64 = 1152
+
+}

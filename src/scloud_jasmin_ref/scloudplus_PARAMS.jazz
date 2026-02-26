@@ -1,0 +1,531 @@
+require "scloudplus_PARAMS.jinc"
+
+/*
+  encode.jinc
+*/
+
+export fn j_compute_v
+( reg mut ptr complex[16] v
+, reg const ptr u8[Params::mu/8] m
+) -> reg ptr complex[16]
+{
+  v = _compute_v(v, m);
+  return v;
+}
+
+export fn j_compute_w
+( reg mut ptr u16[32] w
+, reg const ptr complex[16] v
+) -> reg ptr u16[32]
+{
+  w = _compute_w(w, v);
+  return w;
+}
+
+export fn j_reduce_w
+( reg mut ptr complex[16] inout
+) -> reg ptr complex[16]
+{
+  inout = _reduce_w(inout);
+  return inout;
+}
+
+export fn j_recover_m
+( reg mut ptr u8[Params::mu/8] m
+, reg const ptr complex[16] v
+) -> reg ptr u8[Params::mu/8]
+{
+  m = _recover_m(m, v);
+  return m;
+}
+
+export fn j_recover_v
+( reg mut ptr complex[16] v
+, reg const ptr complex[16] w
+) -> reg ptr complex[16]
+{
+  v = _recover_v(v, w);
+  return v;
+}
+
+export fn j_bddbw32
+( reg mut ptr complex[16] y
+, reg const ptr complex[16] t
+) -> reg ptr complex[16]
+{
+  y = BW32::bdd_bw(y, t);
+  return y;
+}
+
+export fn j_bddbw16
+( reg mut ptr complex[8] y
+, reg const ptr complex[8] t
+) -> reg ptr complex[8]
+{
+  y = BW16::bdd_bw(y, t);
+  return y;
+}
+
+export fn j_bddbw8
+( reg mut ptr complex[4] y
+, reg const ptr complex[4] t
+) -> reg ptr complex[4]
+{
+  y = BW8::bdd_bw(y, t);
+  return y;
+}
+
+export fn j_bddbw4
+( reg mut ptr complex[2] y
+, reg const ptr complex[2] t
+) -> reg ptr complex[2]
+{
+  y = BW4::bdd_bw(y, t);
+  return y;
+}
+
+export fn j_bddbw2
+( reg mut ptr complex[1] y
+, reg const ptr complex[1] t
+) -> reg ptr complex[1]
+{
+  y = BW2::bdd_bw(y, t);
+  return y;
+}
+
+export fn j_msgencode
+( reg mut ptr u16[Params::mbar*Params::nbar] matM
+, reg const ptr u8[Params::subm*Params::mu/8] msg
+) -> reg ptr u16[Params::mbar*Params::nbar]
+{
+  matM = _msgencode(matM, msg);
+  return matM;
+}
+
+export fn j_msgdecode
+( reg mut ptr u8[Params::subm*Params::mu/8] msg
+, reg const ptr u16[Params::mbar*Params::nbar] matM
+) -> reg ptr u8[Params::subm*Params::mu/8]
+{
+  msg = _msgdecode(msg, matM);
+  return msg;
+}
+
+export fn j_packpk
+( reg mut ptr u8[Params::m*Params::nbar*Params::logq/8] pk
+, reg const ptr u16[Params::m*Params::nbar] B
+) -> reg ptr u8[Params::m*Params::nbar*Params::logq/8] /* pk */
+{
+  pk = packpk(pk, B);
+  return pk;
+}
+
+export fn j_unpackpk
+( reg mut ptr u16[Params::m*Params::nbar] B
+, reg const ptr u8[Params::m*Params::nbar*Params::logq/8] pk
+) -> reg ptr u16[Params::m*Params::nbar] /* B */
+{
+  B = unpackpk(B, pk);
+  return B;
+}
+
+export fn j_packsk
+( reg mut ptr u8[Params::pke_sk] sk
+, reg const ptr u16[Params::nbar*Params::n] S
+) -> reg ptr u8[Params::pke_sk] /* sk */
+{
+  sk = packsk(sk, S);
+  return sk;
+}
+
+export fn j_unpacksk
+( reg mut ptr u16[Params::nbar*Params::n] S
+, reg const ptr u8[Params::pke_sk] sk
+) -> reg ptr u16[Params::n*Params::nbar] /* S */
+{
+  S = unpacksk(S, sk);
+  return S;
+}
+
+export fn j_compressc1
+( reg mut ptr u16[Params::mbar*Params::n] C1
+) -> reg ptr u16[Params::mbar*Params::n] /* C1 */
+{
+  C1 = compressc1(C1);
+  return C1;
+}
+
+
+export fn j_decompressc1
+( reg mut ptr u16[Params::mbar*Params::n] C1
+) -> reg ptr u16[Params::mbar*Params::n] /* C1 */
+{
+  C1 = decompressc1(C1);
+  return C1;
+}
+
+export fn j_compressc2
+( reg mut ptr u16[Params::mbar*Params::nbar] C2
+) -> reg ptr u16[Params::mbar*Params::nbar] /* C2 */
+{
+  C2 = compressc2(C2);
+  return C2;
+}
+
+export fn j_decompressc2
+( reg mut ptr u16[Params::mbar*Params::nbar] C2
+) -> reg ptr u16[Params::mbar*Params::nbar] /* C2 */
+{
+  C2 = decompressc2(C2);
+  return C2;
+}
+
+export fn j_packc1
+( reg mut ptr u8[Params::c1] c1
+, reg const ptr u16[Params::mbar*Params::n] C1
+) -> reg ptr u8[Params::c1] /* c1 */
+{
+  c1 = packc1(c1, C1);
+  return c1;
+}
+
+export fn j_unpackc1
+( reg mut ptr u16[Params::mbar*Params::n] C1
+, reg const ptr u8[Params::c1] c1
+) -> reg ptr u16[Params::mbar*Params::n] /* C1 */
+{
+  C1 = unpackc1(C1, c1);
+  return C1;
+}
+
+export fn j_packc2
+( reg mut ptr u8[Params::c2] c2
+, reg const ptr u16[Params::mbar*Params::nbar] C2
+) -> reg ptr u8[Params::c2] /* c2 */
+{
+  c2 = packc2(c2, C2);
+  return c2;
+}
+
+export fn j_unpackc2
+( reg mut ptr u16[Params::mbar*Params::nbar] C2
+, reg const ptr u8[Params::c2] c2
+) -> reg ptr u16[Params::mbar*Params::nbar] /* C2 */
+{
+  C2 = unpackc2(C2, c2);
+  return C2;
+}
+
+/*
+  scloudplus_keccak.jinc
+*/
+
+export fn j_F
+( reg mut ptr u8[80] r
+, reg const ptr u8[32] alpha
+) -> reg ptr u8[80] /* r */
+{
+  r = F(r, alpha);
+  return r;
+}
+
+export fn j_shake256_eta1
+( reg mut ptr u8[(Params::m*Params::nbar*2*Params::eta1)/8] r
+, reg const ptr u8[32] alpha
+) -> reg ptr u8[(Params::m*Params::nbar*2*Params::eta1)/8] /* r */
+{
+  r = shake256_eta1(r, alpha);
+  return r;
+}
+
+export fn j_shake256_eta2
+( reg mut ptr u8[(Params::mbar*(Params::n+Params::nbar)*2*Params::eta2)/8] r
+, reg const ptr u8[32] alpha
+) -> reg ptr u8[(Params::mbar*(Params::n+Params::nbar)*2*Params::eta2)/8] /* r */
+{
+  r = shake256_eta2(r, alpha);
+  return r;
+}
+
+export fn j_XOF_init
+( reg mut ptr u64[25] state
+, reg const ptr u8[32] seed
+) -> reg ptr u64[25]
+{ reg u256[7] st;
+  st = XOF_init( seed);
+  state = __stavx2_unpack(state, st);
+  return state;
+}
+
+export fn j_XOF_rejblocks
+( reg mut ptr u8[Params::rejblocks * 136] buf
+, reg mut ptr u64[25] state
+) -> reg ptr u8[Params::rejblocks * 136]  /* buf */
+   , reg ptr u64[25]
+{ reg u256[7] st;
+  st = __stavx2_pack(state);
+  buf, st = XOF_rejblocks( buf, st);
+  state = __stavx2_unpack(state, st);
+  return buf, state;
+}
+
+
+/*
+  sample.jinc
+*/
+
+export fn j_rejection_n
+( reg mut ptr u16[Params::mnout] out
+, reg const ptr u8[Params::rejblocks*136] buf
+) -> reg mut ptr u16[Params::mnout] /* out */
+   , reg u64                        /* outlen */
+{
+  reg u64 outlen;
+  out, outlen = rejection(out, Params::n, buf);
+  return out, outlen;
+}
+
+export fn j_rejection_m
+( reg mut ptr u16[Params::mnout] out
+, reg const ptr u8[Params::rejblocks*136] buf
+) -> reg mut ptr u16[Params::mnout] /* out */
+   , reg u64                        /* outlen */
+{
+  reg u64 outlen;
+  out, outlen = rejection(out, Params::m, buf);
+  return out, outlen;
+}
+
+export fn j_bm_set
+( reg mut ptr u64[Params::bm_size] bm
+, reg mut ptr u64[Params::bm_size] bmn
+, reg u64 idx
+, reg u64 bmn_flag
+) -> reg ptr u64[Params::bm_size] /* bm */
+   , reg ptr u64[Params::bm_size] /* bmn */
+   , reg u64 /* 0/1 */
+{
+  reg u64 r;
+  if ( bmn_flag == 0) {
+    bm, bmn, r = bm_set(bm, bmn, idx, 0);
+  } else {
+    bm, bmn, r = bm_set(bm, bmn, idx, 1);
+  }
+  return bm, bmn, r;
+}
+
+export fn j_bm_dump_n
+( reg mut ptr u16[Params::n] Si
+, reg const ptr u64[Params::bm_size] bm
+, reg const ptr u64[Params::bm_size] bmn
+) -> reg ptr u16[Params::n] /* Si */
+{
+  Si = bm_dump_n(Si, bm, bmn);
+  return Si;
+}
+
+export fn j_samplepsi
+( reg mut ptr u16[Params::nbar*Params::n] S
+, reg const ptr u8[32] r1
+) -> reg mut ptr u16[Params::nbar*Params::n] /* S */
+{
+  S = samplepsi(S, r1);
+  return S;
+}
+
+export fn j_samplephi
+( reg mut ptr u16[Params::mbar*Params::m] S
+, reg const ptr u8[32] r1
+) -> reg mut ptr u16[Params::mbar*Params::m] /* S */
+{
+  S = samplephi(S, r1);
+  return S;
+}
+
+export fn j_sampleeta1
+( reg mut ptr u16[Params::m*Params::nbar] E
+, reg const ptr u8[32] r2
+) -> reg mut ptr u16[Params::m*Params::nbar] /* E */
+{
+  E = sampleeta1(E, r2);
+  return E;
+}
+
+export fn j_sampleeta2
+( reg mut ptr u16[Params::mbar*Params::n] E1
+, reg mut ptr u16[Params::mbar*Params::nbar] E2
+, reg const ptr u8[32] r2
+) -> reg mut ptr u16[Params::mbar*Params::n]    /* E1 */
+   , reg mut ptr u16[Params::mbar*Params::nbar] /* E2 */
+{
+  E1, E2 = sampleeta2(E1, E2, r2);
+  return E1, E2;
+}
+
+export fn j_genMat
+( reg mut ptr u16[Params::m*Params::n] A
+, reg const ptr u8[16] seedA
+) -> reg ptr u16[Params::m*Params::n] /* A */
+{
+  A = genMat(A, seedA);
+  return A;
+}
+
+/*
+  matrix.jinc
+*/
+
+export fn j_AxStxE
+( reg mut ptr u16[Params::m*Params::nbar] B
+, reg const ptr u16[Params::m*Params::n] A
+, reg const ptr u16[Params::nbar*Params::n] S
+, reg const ptr u16[Params::m*Params::nbar] E
+) -> reg ptr u16[Params::m*Params::nbar] /* B */
+{
+  B = AxStxE(B, A, S, E);
+  return B;
+}
+
+export fn j_SxAxE
+( reg mut ptr u16[Params::mbar*Params::n] C1
+, reg const ptr u16[Params::mbar*Params::m] S
+, reg const ptr u16[Params::m*Params::n] A
+, reg const ptr u16[Params::mbar*Params::n] E1
+) -> reg ptr u16[Params::mbar*Params::n] /* C1 */
+{
+  C1 = SxAxE(C1, S, A, E1);
+  return C1;
+}
+
+export fn j_SxBxExM
+( reg mut ptr u16[Params::mbar*Params::nbar] C2
+, reg const ptr u16[Params::mbar*Params::m] S
+, reg const ptr u16[Params::m*Params::nbar] B
+, reg const ptr u16[Params::mbar*Params::nbar] E2
+, reg const ptr u16[Params::mbar*Params::nbar] M
+) -> reg ptr u16[Params::mbar*Params::nbar] /* C2 */
+{
+  C2 = SxBxExM(C2, S, B, E2, M);
+  return C2;
+}
+
+export fn j_C2xC1xS
+( reg mut ptr u16[Params::mbar*Params::nbar] D
+, reg const ptr u16[Params::mbar*Params::nbar] C2
+, reg const ptr u16[Params::mbar*Params::n] C1
+, reg const ptr u16[Params::nbar*Params::n] S
+) -> reg ptr u16[Params::mbar*Params::nbar] /* D */
+{
+  D = C2xC1xS(D, C2, C1, S);
+  return D;
+}
+
+
+/*
+  pke.jinc
+*/
+
+export fn j_keygen_plain
+( reg mut ptr u16[Params::m*Params::nbar] B
+, reg mut ptr u8[16] seedA
+, reg mut ptr u16[Params::nbar*Params::n] S
+, reg const ptr u8[32] alpha
+) -> reg ptr u16[Params::m*Params::nbar] /* B */
+   , reg ptr u8[16]                      /* seedA */
+   , reg ptr u16[Params::nbar*Params::n] /* S */
+{
+  B, seedA, S = keygen_plain(B, seedA, S, alpha);
+  return B, seedA, S;
+}
+
+export fn j_keygen
+( reg mut ptr u8[Params::pk] pk
+, reg mut ptr u8[Params::pke_sk] sk
+, reg const ptr u8[32] alpha
+) -> reg ptr u8[Params::pk]  /* pk */
+   , reg ptr u8[Params::pke_sk] /* sk */
+{
+  pk, sk = keygen(pk, sk, alpha);
+  return pk, sk;
+}
+
+export fn j_enc_derand_plain
+( reg mut ptr u16[Params::mbar*Params::n] C1
+, reg mut ptr u16[Params::mbar*Params::nbar] C2
+, reg const ptr u16[Params::m*Params::nbar] B
+, reg const ptr u8[16] seedA
+, reg const ptr u8[Params::l/8] msg
+, reg const ptr u8[32] coins
+) -> reg ptr u16[Params::mbar*Params::n]    /* C1 */
+   , reg ptr u16[Params::mbar*Params::nbar] /* C2 */
+{
+  C1, C2 = enc_derand_plain(C1, C2, B, seedA, msg, coins);
+  return C1, C2;
+}
+
+export fn j_enc_derand
+( reg mut ptr u8[Params::c1+Params::c2] ctxt
+, reg const ptr u8[Params::pk] pk
+, reg const ptr u8[Params::l/8] msg
+, reg const ptr u8[32] coins
+) -> reg ptr u8[Params::c1+Params::c2] /* ctxt */
+{
+  ctxt = enc_derand(ctxt, pk, msg, coins);
+  return ctxt;
+}
+
+export fn j_dec_plain
+( reg mut ptr u8[Params::l/8] msg
+, reg const ptr u16[Params::nbar*Params::n] S
+, reg const ptr u16[Params::mbar*Params::n] C1
+, reg const ptr u16[Params::mbar*Params::nbar] C2
+) -> reg ptr u8[Params::l/8] /* msg */
+{
+  msg = dec_plain(msg, S, C1, C2);
+  return msg;
+}
+
+export fn j_dec
+( reg mut ptr u8[Params::l/8] msg
+, reg const ptr u8[Params::pke_sk] sk
+, reg const ptr u8[Params::c1+Params::c2] ctxt
+) -> reg ptr u8[Params::l/8] /* msg */
+{
+  msg = dec(msg, sk, ctxt);
+  return msg;
+}
+
+
+/*
+  kem.jinc
+*/
+
+export fn j_kem_keygen
+( reg mut ptr u8[Params::pk] pk
+, reg mut ptr u8[Params::kem_sk] sk
+) -> reg ptr u8[Params::pk]  /* pk */
+   , reg ptr u8[Params::kem_sk] /* sk */
+{
+  pk, sk = kem_keygen(pk, sk);
+  return pk, sk;
+}
+
+export fn j_kem_encaps
+( reg mut ptr u8[Params::c1+Params::c2] ctxt
+, reg mut ptr u8[Params::ss] ss
+, reg const ptr u8[Params::pk] pk
+) -> reg ptr u8[Params::c1+Params::c2] /* ctxt */
+   , reg ptr u8[Params::ss] /* ss */
+{
+  ctxt, ss = kem_encaps(ctxt, ss, pk);
+  return ctxt, ss;
+}
+
+export fn j_kem_decaps
+( reg mut ptr u8[Params::ss] ss
+, reg const ptr u8[Params::kem_sk] sk
+, reg const ptr u8[Params::c1+Params::c2] ctxt
+) -> reg ptr u8[Params::ss] /* ss */
+{  ss = kem_decaps(ss, sk, ctxt);
+  return ss;
+}

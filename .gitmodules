@@ -1,0 +1,12 @@
+[submodule "submodules/scloudplus"]
+	path = submodules/scloudplus
+	url = https://github.com/haslab/scloudplus.git
+	branch = JasminCode
+[submodule "submodules/jasmin"]
+	path = submodules/jasmin
+	url = https://github.com/jasmin-lang/jasmin.git
+	branch = deploy-fp
+[submodule "submodules/formosa-keccak"]
+	path = submodules/formosa-keccak
+	url = https://github.com/formosa-crypto/formosa-keccak.git
+	branch = main

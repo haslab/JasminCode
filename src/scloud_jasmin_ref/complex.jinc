@@ -1,0 +1,135 @@
+require "double.jinc"
+
+type complex = u128;
+
+complex complex_zero      = 0x00000000000000000000000000000000;
+complex complex_one_one   = 0x3FF00000000000003FF0000000000000;
+complex complex_half_minushalf = 0xBFE00000000000003FE0000000000000;
+
+inline fn complex_pack
+( reg double re im
+) -> reg complex
+{
+ reg complex c;
+ c = #VPUNPCKL_2u64(re, im);
+ return c;
+}
+
+inline fn complex_unpack
+( reg complex c
+) -> reg double, reg double
+{
+ reg double re, im, zero;
+ zero = #set0_128();
+ re = #VPUNPCKL_2u64(c, zero);
+ im = #VPUNPCKH_2u64(c, zero);
+ return re, im;
+}
+
+inline fn complex_re
+( reg complex c
+) -> reg double
+{
+ reg double re, zero;
+ zero = #set0_128();
+ re = #VPUNPCKL_2u64(c, zero);
+ return re;
+}
+
+inline fn complex_im
+( reg complex c
+) -> reg double
+{
+ reg double im, zero;
+ zero = #set0_128();
+ im = #VPUNPCKH_2u64(c, zero);
+ return im;
+}
+
+inline fn complex_add
+( reg complex a b
+) -> reg complex
+{
+ reg double re1, im1, re2, im2;
+ reg complex c;
+ re1, im1 = complex_unpack(a);
+ re2, im2 = complex_unpack(b);
+ re1 = double_add(re1, re2);
+ im1 = double_add(im1, im2);
+ c = complex_pack(re1, im1);
+ return c;
+}
+
+inline fn complex_sub
+( reg complex a b
+) -> reg complex
+{
+ reg double re1, im1, re2, im2;
+ reg complex c;
+ re1, im1 = complex_unpack(a);
+ re2, im2 = complex_unpack(b);
+ re1 = double_sub(re1, re2);
+ im1 = double_sub(im1, im2);
+ c = complex_pack(re1, im1);
+ return c;
+}
+
+inline fn complex_mul
+( reg complex a b
+) -> reg complex
+{
+ reg double re1, im1, re2, im2, t1, t2, re, im;
+ reg complex c;
+ re1, im1 = complex_unpack(a);
+ re2, im2 = complex_unpack(b);
+ t1 = re1;
+ t2 = im1;
+ t1 = double_mul(t1, re2);
+ t2 = double_mul(t2, im2);
+ re = double_sub(t1, t2);
+ t1 = double_mul(re1, im2);
+ t2 = double_mul(im1, re2);
+ im = double_add(t1, t2);
+ c = complex_pack(re, im);
+ return c;
+}
+
+inline fn complex_trunc
+( reg complex c
+) -> reg complex
+{
+ reg double re, im;
+ re, im = complex_unpack(c);
+ re = double_trunc(re);
+ im = double_trunc(im);
+ c = complex_pack(re, im);
+ return c;
+}
+
+inline fn complex_myround
+( reg complex c
+) -> reg complex
+{
+ reg double re, im;
+ re, im = complex_unpack(c);
+ re = double_myround(re);
+ im = double_myround(im);
+ c = complex_pack(re, im);
+ return c;
+}
+
+inline fn complex_distance2
+( reg complex c1 c2
+) -> reg double
+{
+ reg double d, t, re1, im1, re2, im2;
+ re1, im1 = complex_unpack(c1);
+ re2, im2 = complex_unpack(c2);
+ re1 = #SUBSD(re1, re2);
+ d = #MULSD(re1, re1);
+ im1 = #SUBSD(im1, im2);
+ t = #MULSD(im1, im1);
+ d = #ADDSD(d, t);
+ 
+ return d;
+}

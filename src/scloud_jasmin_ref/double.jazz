@@ -1,0 +1,198 @@
+require "double.jinc"
+
+/*
+j_dadd
+j_dsub
+j_dmul
+j_deq
+j_dlt
+j_dle
+j_dunord
+j_dneq
+j_dge
+j_dgt
+j_dord
+j_dcmpmask
+j_dround
+j_dfloor
+j_dceil
+j_dtrunc
+j_dmyround
+j_dround_u64
+j_dtrunc_u64
+j_dfrom_u64
+*/
+
+export fn j_dadd
+( reg double x y
+) -> reg double
+{
+  x = double_add(x, y);
+  return x;
+}
+
+export fn j_dsub
+( reg double x y
+) -> reg double
+{
+  x = double_sub(x, y);
+  return x;
+}
+
+export fn j_dmul
+( reg double x y
+) -> reg double
+{
+  x = double_mul(x, y);
+  return x;
+}
+
+// COMPARISONS
+
+export fn j_deq     //CMPEQSD
+( reg double a b
+) -> reg double
+{
+  a = double_eq(a, b);
+  return a;
+}
+
+export fn j_dlt     //CMPLTSD
+( reg double a b
+) -> reg double
+{
+  a = double_lt(a, b);
+  return a;
+}
+
+export fn j_dle     //CMPLESD
+( reg double a b
+) -> reg double
+{
+  a = double_le(a, b);
+  return a;
+}
+
+export fn j_dunord  //CMPUNORDSD
+( reg double a b
+) -> reg double
+{
+  a = double_unord(a, b);
+  return a;
+}
+
+export fn j_dneq    //CMPNEQSD
+( reg double a b
+) -> reg double
+{
+  a = double_neq(a, b);
+  return a;
+}
+
+export fn j_dge     //CMPNLTSD
+( reg double a b
+) -> reg double
+{
+  a = double_ge(a, b);
+  return a;
+}
+
+export fn j_dgt     //CMPNLESD
+( reg double a b
+) -> reg double
+{
+  a = double_gt(a, b);
+  return a;
+}
+
+export fn j_dord    //CMPORDSD
+( reg double a b
+) -> reg double
+{
+  a = double_ord(a, b);
+  return a;
+}
+
+export fn j_dcmpmask
+( reg double dmask
+) -> reg u64
+{
+ reg u64 imask;
+ imask = double_cmpmask(dmask);
+ return imask;
+}
+
+// ROUNDINGS...
+
+export fn j_dround
+( reg double x
+) -> reg double
+{
+  x = double_round(x);
+  x = x;
+  return x;
+}
+
+export fn j_dfloor
+( reg double x
+) -> reg double
+{
+  x = double_floor(x);
+  x = x;
+  return x;
+}
+
+export fn j_dceil
+( reg double x
+) -> reg double
+{
+  x = double_ceil(x);
+  x = x;
+  return x;
+}
+
+export fn j_dtrunc
+( reg double x
+) -> reg double
+{
+  x = double_trunc(x);
+  x = x;
+  return x;
+}
+
+export fn j_dmyround
+( reg double x
+) -> reg double
+{
+  x = x;
+  x = double_myround(x);
+  return x;
+}
+
+export fn j_dround_u64     //cvtsd2si
+( reg double x
+) -> reg u64
+{
+  reg u64 z;
+  z = double_round_u64(x);
+  return z;
+}
+
+export fn j_dtrunc_u64      //cvttsd2si
+( reg double x
+) -> reg u64
+{
+  reg u64 z;
+  z = double_trunc_u64(x);
+  return z;
+}
+
+export fn j_dfrom_u64       //cvtsi2sd
+( reg u64 x
+) -> reg double {
+  reg double z;
+  z = double_from_u64(x);
+  return z;
+}
+
+

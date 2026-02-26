@@ -1,0 +1,220 @@
+type double = u128;
+
+double double_zero      = 0x0000000000000000;
+double double_one       = 0x3FF0000000000000;
+double double_minusone  = 0xBFF0000000000000;
+double double_half      = 0x3FE0000000000000;
+double double_minushalf = 0xBFE0000000000000;
+
+double double__000244140625 = 0x3F30000000000000;
+double double_8  = 0x4020000000000000;
+double double_16 = 0x4030000000000000;
+
+inline fn double_add
+( reg double x y
+) -> reg double
+{
+  x = #ADDSD(x, y);
+  x = x;
+  return x;
+}
+
+inline fn double_sub
+( reg double x y
+) -> reg double
+{
+  x = #SUBSD(x, y);
+  x = x;
+  return x;
+}
+
+inline fn double_mul
+( reg double x y
+) -> reg double
+{
+  x = #MULSD(x, y);
+  x = x;
+  return x;
+}
+
+// COMPARISONS
+
+inline fn double_eq     //CMPEQSD
+( reg double a b
+) -> reg double
+{
+  a = a;
+  a = #CMPSD(a, b, 0);
+  return a;
+}
+
+inline fn double_lt     //CMPLTSD
+( reg double a b
+) -> reg double
+{
+  a = a;
+  a = #CMPSD(a, b, 1);
+  return a;
+}
+
+inline fn double_le     //CMPLESD
+( reg double a b
+) -> reg double
+{
+  a = a;
+  a = #CMPSD(a, b, 2);
+  return a;
+}
+
+inline fn double_unord  //CMPUNORDSD
+( reg double a b
+) -> reg double
+{
+  a = a;
+  a = #CMPSD(a, b, 3);
+  return a;
+}
+
+inline fn double_neq    //CMPNEQSD
+( reg double a b
+) -> reg double
+{
+  a = a;
+  a = #CMPSD(a, b, 4);
+  return a;
+}
+
+inline fn double_ge     //CMPNLTSD
+( reg double a b
+) -> reg double
+{
+  a = a;
+  a = #CMPSD(a, b, 5);
+  return a;
+}
+
+inline fn double_gt     //CMPNLESD
+( reg double a b
+) -> reg double
+{
+  a = a;
+  a = #CMPSD(a, b, 6);
+  return a;
+}
+
+inline fn double_ord    //CMPORDSD
+( reg double a b
+) -> reg double
+{
+  a = a;
+  a = #CMPSD(a, b, 7);
+  return a;
+}
+
+inline fn double_cmpmask
+( reg double dmask
+) -> reg u64
+{
+ reg u64 imask;
+ imask = (64u) dmask;
+ return imask;
+}
+
+// ROUNDINGS...
+
+inline fn double_round
+( reg double x
+) -> reg double
+{
+  x = #ROUNDSD(x, 0x0);
+  x = x;
+  return x;
+}
+
+inline fn double_floor
+( reg double x
+) -> reg double
+{
+  x = #ROUNDSD(x, 0x1);
+  x = x;
+  return x;
+}
+
+inline fn double_ceil
+( reg double x
+) -> reg double
+{
+  x = #ROUNDSD(x, 0x2);
+  x = x;
+  return x;
+}
+
+inline fn double_trunc
+( reg double x
+) -> reg double
+{
+  x = #ROUNDSD(x, 0x3);
+  x = x;
+  return x;
+}
+
+inline fn double_myround
+( reg double x
+) -> reg double
+{
+ reg double xi, xf, d0, dh, dmh, d1, dmask;
+ reg u64 mask;
+ x = x;
+ xi = x;
+ xi = double_trunc(xi);
+ xf = x;
+ xf = #SUBSD(xf, xi);
+ d0 = double_zero;
+ dh = double_half;
+ dmh = double_minushalf;
+ d1 = double_one;
+ dmask = double_ge(x,d0);
+ mask = double_cmpmask(dmask);
+ if (mask != 0) {
+  dmask = double_ge(xf,dh);
+  mask = double_cmpmask(dmask);
+  if (mask != 0) {
+    xi = double_add(xi, d1);
+  }
+ } else {
+  dmask = double_le(xf,dmh);
+  mask = double_cmpmask(dmask);
+  if (mask != 0) {
+    xi = double_sub(xi, d1);
+  }
+ }
+ return xi;
+}
+
+inline fn double_round_u64     //cvtsd2si
+( reg double x
+) -> reg u64
+{
+  reg u64 z;
+  z = #CVTSD2SI(x);
+  return z;
+}
+
+inline fn double_trunc_u64      //cvttsd2si
+( reg double x
+) -> reg u64
+{
+  reg u64 z;
+  z = #CVTTSD2SI(x);
+  return z;
+}
+
+inline fn double_from_u64       //cvtsi2sd
+( reg u64 x
+) -> reg double {
+  reg double z;
+  z = #CVTSI2SD(x);
+  return z;
+}
+
+
